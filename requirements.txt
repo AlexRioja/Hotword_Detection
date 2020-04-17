@@ -5,4 +5,4 @@ pydub~=0.23.1
 scipy~=1.4.1
 cpuid
 keras==2.1.5
-tensorflow==1.5
+tensorflow==1.15.2
