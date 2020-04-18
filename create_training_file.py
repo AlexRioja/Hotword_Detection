@@ -4,7 +4,7 @@ from pydub import AudioSegment
 from scipy.io import wavfile
 import matplotlib.pyplot as plt
 
-Ty = 1496
+Ty = 1375
 
 
 def overlaps(piece, previous_pieces):
@@ -19,10 +19,12 @@ def overlaps(piece, previous_pieces):
 def take_a_piece(audio_ms):
     start_piece = np.random.randint(low=0, high=10000 - audio_ms)  # Starts 0-10 but with margin
     end_piece = start_piece + audio_ms - 1
+    print("PIECE GOES:"+str(start_piece), str(end_piece))
     return start_piece, end_piece
 
 
 def insert_into_base_clip(base_clip, audio, covered_zones):
+    #print("BASE CLIP LENGTH:"+str(len(base_clip)))
     audio_ms = len(audio)
     piece = take_a_piece(audio_ms)
     while overlaps(piece, covered_zones):
@@ -39,7 +41,7 @@ def get_files(route):
             if file.endswith("wav"):
                 path = os.path.join(root, file)
                 # print("Procesando :" + path)
-                sound = AudioSegment.from_wav(path) + 10
+                sound = AudioSegment.from_wav(path)
                 audio.append(sound)
     return audio
 
@@ -47,19 +49,22 @@ def get_files(route):
 def mark_positives(y_train, end_time):
     # Ty is the number of steps we want to take (discrete steps in spectrogram)
     positive_occurrence = int(end_time * Ty / 10000.0)
-
+    print("Positive:"+str(positive_occurrence))
     for i in range(positive_occurrence + 1, positive_occurrence + 51):
         if i < Ty:
             y_train[0, i] = 1
     return y_train
 
+
 def mark_positives_start(y_train, start_time):
     positive_occurrence = int(start_time * Ty / 10000.0)
-    for i in range(positive_occurrence + 1, positive_occurrence + 101):
+    print(positive_occurrence)
+    for i in range(positive_occurrence + 1, positive_occurrence + 51):
         if i < Ty:
             y_train[0, i] = 1
             #print("poniendo unos")
     return y_train
+
 
 def graph_spectrogram(wav_file, plot=False):
     rate, data = wavfile.read(wav_file)
@@ -81,7 +86,6 @@ def create_training_wav(base_clip, label):
     positives = get_files('dataset/positive')
     negatives = get_files('dataset/negative')
 
-    # np.random.seed(18)
     base_clip = base_clip - 15
 
     covered_zones = []
@@ -96,6 +100,7 @@ def create_training_wav(base_clip, label):
     for rand_pos in rand_positives:
         #print("Inserting positive")
         base_clip, piece = insert_into_base_clip(base_clip, rand_pos, covered_zones)
+        #print("Piece ends: "+str(piece[1]))
         y_train = mark_positives(y_train, end_time=piece[1])  # Keeping record of when the positive occurs
         #y_train= mark_positives_start(y_train, piece[0])
     for rand_neg in rand_negatives:
@@ -105,7 +110,7 @@ def create_training_wav(base_clip, label):
     base_clip = base_clip.apply_gain(-20.0 - base_clip.dBFS)  # Keepeing dbs in order
     print("Guardando archivo de entreamiento: " + str(label))
     base_clip.export("dataset/training_data/train_" + str(label) + ".wav", format="wav")
-    x_train = graph_spectrogram("dataset/training_data/train_" + str(label) + ".wav")
-    #print("SHAPES WHEN PROCESSED DATASET: " + str(x_train.shape), str(y_train.shape))
+    x_train = graph_spectrogram("dataset/training_data/train_" + str(label) + ".wav", False)
+    print("SHAPES WHEN PROCESSED DATASET: " + str(x_train.shape), str(y_train.shape))
     print(y_train)
     return x_train, y_train

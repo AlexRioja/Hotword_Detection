@@ -1,7 +1,7 @@
 from create_training_file import create_training_wav, get_files
 from keras.callbacks import ModelCheckpoint
 from keras.models import Model, load_model, Sequential
-from keras.layers import Dense, Activation, Dropout, Input, Masking, TimeDistributed, LSTM, Conv1D
+from keras.layers import Dense, Activation, Dropout, Input, Masking, TimeDistributed, LSTM, Conv1D, Conv2D
 from keras.layers import GRU, Bidirectional, BatchNormalization, Reshape, Flatten
 from keras.optimizers import Adam
 import numpy as np
@@ -13,39 +13,62 @@ import os
 
 
 
-# import keras
-# import tensorflow as tf
-#
-#
-# config = tf.ConfigProto( device_count = {'GPU': 1 , 'CPU': 12} )
-# sess = tf.Session(config=config)
-# keras.backend.set_session(sess)
+import keras
+import tensorflow as tf
+
+
+config = tf.ConfigProto( device_count = {'GPU': 1 , 'CPU': 12} )
+sess = tf.Session(config=config)
+keras.backend.set_session(sess)
 
 
 import pickle
 
 def create_model(input_shape):
+    # X_input = Input(shape=input_shape)
+    #
+    # # Convolutional layer
+    # X = Conv1D(196, kernel_size=15, strides=4)(X_input)  # CONV1D
+    # X = BatchNormalization()(X)  # Batch normalization
+    # X = Activation('relu')(X)  # ReLu activation
+    # X = Dropout(0.7)(X)
+    #
+    # # GRU layer
+    # X = GRU(units=128, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
+    # X = Dropout(0.7)(X)  # dropout (use 0.8)
+    # X = BatchNormalization()(X)  # Batch normalization
+    #
+    # # GRU Layer
+    # X = GRU(units=128, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
+    # X = Dropout(0.7)(X)  # dropout (use 0.8)
+    # X = BatchNormalization()(X)  # Batch normalization
+    # X = Dropout(0.7)(X)  # dropout (use 0.8)
+    #
+    # # Time-distributed dense layer
+    # X = TimeDistributed(Dense(1, activation="sigmoid", name="Output layer"))(X)  # time distributed  (sigmoid)
+    #
+    # model = Model(inputs=X_input, outputs=X)
     X_input = Input(shape=input_shape)
 
-    # Convolutional layer
-    X = Conv1D(196, kernel_size=15, strides=4)(X_input)  # CONV1D
-    X = BatchNormalization()(X)  # Batch normalization
-    X = Activation('relu')(X)  # ReLu activation
-    X = Dropout(0.8)(X)
+    # Step 1: CONV layer : for extracting features
+    X = Conv1D(filters=256, kernel_size=15, strides=4)(X_input)  # CONV1D
+    # X = BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001)(X)  # Batch normalization
+    # X = Activation('relu')(X)  # ReLu activation
+    # X = Dropout(0.8)(X)  # dropout (use 0.8)
 
-    # GRU layer
+    # Step 2: First GRU Layer
+    # X = GRU(units=128, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
+    # X = Dropout(0.8)(X)  # dropout (use 0.8)
+    # X = BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001)(X)  # Batch normalization
+
+    # Step 3: Second GRU Layer
     X = GRU(units=128, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
-    X = Dropout(0.8)(X)  # dropout (use 0.8)
-    X = BatchNormalization()(X)  # Batch normalization
+    # X = Dropout(0.8)(X)  # dropout (use 0.8)
+    # X = BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001)(X)  # Batch normalization
+    # X = Dropout(0.8)(X)  # dropout (use 0.8)
 
-    # GRU Layer
-    X = GRU(units=128, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
-    X = Dropout(0.8)(X)  # dropout (use 0.8)
-    X = BatchNormalization()(X)  # Batch normalization
-    X = Dropout(0.8)(X)  # dropout (use 0.8)
-
-    # Time-distributed dense layer
-    X = TimeDistributed(Dense(1, activation="sigmoid", name="Output layer"))(X)  # time distributed  (sigmoid)
+    # Step 4: Time-distributed dense layer
+    X = TimeDistributed(Dense(1, activation="sigmoid"))(X)  # time distributed  (sigmoid)
 
     model = Model(inputs=X_input, outputs=X)
     return model
@@ -53,12 +76,12 @@ def create_model(input_shape):
 noises_path = 'dataset/noise'
 i = 0
 
-Tx = 5998  # The number of time steps input to the model from the spectrogram
+Tx = 5511  # The number of time steps input to the model from the spectrogram
 n_freq = 101  # Number of frequencies input to the model at each time step of the spectrogram
 
 model = create_model(input_shape=(Tx, n_freq))
-opt = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01, amsgrad=False)
-#opt= Adam( lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+#opt = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01, amsgrad=False)
+opt= Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=["accuracy"])
 
 
@@ -103,7 +126,7 @@ def train():
                     # except:
                     #     pass
                     # # Mostramos el archivo y la posicion de los positivos
-                    print("Mostrando ejemplo de entrenamiento")
+                    #print("Mostrando ejemplo de entrenamiento")
                     #graph_spectrogram('dataset/training_data/train_testing'+ str(i)+"_"+str(num)+'.wav', True)
                     #plt.plot(y)
                     #plt.show()
@@ -112,15 +135,16 @@ def train():
     return np.array(X_train), np.array(Y_train), np.array(X_eval), np.array(Y_eval)
 c=0
 # try:
-while c<3:
+while c<20:
     X_train, Y_train, X_Eval, Y_Eval=train()
 
     print("KAKAKAKAKAkAKATUAS")
     print(X_train.shape, Y_train.shape)
-    model.fit(X_train, Y_train, epochs=15, batch_size=8)
-    scores = model.evaluate(X_Eval, Y_Eval, verbose=0)
-    print("%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
+    model.fit(X_train, Y_train, epochs=3, batch_size=5, validation_data=(X_Eval, Y_Eval))
+
     c+=1
+scores = model.evaluate(X_Eval, Y_Eval, verbose=0)
+print("%s: %.2f%%" % (model.metrics_names[1], scores[1] * 100))
 model.save("alex_test_model.h5")
 # except Exception as e:
 #     print("EEEEEEEEEEEEEEEEEERROR:  "+str(e))

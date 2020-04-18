@@ -9,6 +9,8 @@ from threading import Thread
 import matplotlib.pyplot as plt
 
 # argparse para traer el valor de los parametros de entrada
+from scipy.io import wavfile
+
 ap = argparse.ArgumentParser(description="Main process in HotWord detection")
 ap.add_argument("-t", "--threshold", help="Introduce it to obtain threshold noise levels of the mic",
                 action="store_true")
@@ -20,7 +22,7 @@ print(p.get_default_input_device_info())
 # This way audio chunks get notified to our main thread
 queue = Queue()
 feed_duration = 10
-fs = 48000  # Sampling rate of the microphone
+fs = 44100  # Sampling rate of the microphone
 chunk_duration = 0.5  # In seconds, each read
 chunk_samples = int(fs * chunk_duration)  # samples of each read, to extract features from
 feed_samples = int(fs * feed_duration)
@@ -76,7 +78,7 @@ def detect_trigger(x):
     return predictions.reshape(-1)
 
 
-def has_new_triggerword(predictions, chunk_duration, feed_duration, threshold=0.5):
+def has_new_triggerword(predictions, chunk_duration, feed_duration, threshold=0.55):
     #print(predictions)
     predictions = predictions > threshold
     #print(predictions)
@@ -90,6 +92,32 @@ def has_new_triggerword(predictions, chunk_duration, feed_duration, threshold=0.
         else:
             level = pred
     return False
+
+def graph_spectrogram(wav_file):
+    rate, data = wavfile.read(wav_file)
+    nfft = 200 # Length of each window segment
+    fs = 8000 # Sampling frequencies
+    noverlap = 120 # Overlap between windows
+    nchannels = data.ndim
+    if nchannels == 1:
+        pxx, freqs, bins, im = plt.specgram(data, nfft, fs, noverlap = noverlap)
+    elif nchannels == 2:
+        pxx, freqs, bins, im = plt.specgram(data[:,0], nfft, fs, noverlap = noverlap)
+    return pxx
+
+def detect_triggerword(filename):
+    plt.subplot(2, 1, 1)
+    x = graph_spectrogram(filename)
+    x = x.swapaxes(0, 1)
+    x = np.expand_dims(x, axis=0)
+    predictions = model.predict(x)
+
+    #predictions.reshape(-1)
+    plt.subplot(2, 1, 2)
+    plt.plot(predictions[0, :, 0])
+    plt.ylabel('probability')
+    plt.show()
+    return predictions
 
 
 def extract_features_spectrum(data):
@@ -105,21 +133,23 @@ def extract_features_spectrum(data):
         return pxx
     elif data.ndim == 1:
         # pxx, freqs, bins, im = plt.specgram(data, 200, 8000, noverlap=120)
-        pxx, f, t = mlab.specgram(data, NFFT=200, Fs=8000, noverlap=120)
+        pxx, freqs, bins = mlab.specgram(data, NFFT=200, Fs=8000, noverlap=120)
         #print("TETE: "+str(t.shape))
+        #plt.show()
         return pxx
 
+detect_triggerword('dataset/training_data/train_testing3_4.wav')
 
-stream = open_audio_stream(callback)
-stream.start_stream()
-
-while True:
-    data_from_queue = queue.get()
-    pxx = extract_features_spectrum(data_from_queue)  # extracting spectogram
-    preds = detect_trigger(pxx)
-    new_trigger = has_new_triggerword(preds, chunk_duration, feed_duration)
-    if new_trigger:
-        print("CARACOLA")
-
-stream.stop_stream()
-stream.close()
+# stream = open_audio_stream(callback)
+# stream.start_stream()
+#
+# while True:
+#     data_from_queue = queue.get()
+#     pxx = extract_features_spectrum(data_from_queue)  # extracting spectogram
+#     preds = detect_trigger(pxx)
+#     new_trigger = has_new_triggerword(preds, chunk_duration, feed_duration)
+#     if new_trigger:
+#         print("CARACOLA")
+#
+# stream.stop_stream()
+# stream.close()
